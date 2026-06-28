@@ -65,6 +65,8 @@
     <div v-if="showInfo" class="info-popup" :style="{ right: (avatarX - 10) + 'px', bottom: (avatarY + 58) + 'px' }">
       <div class="info-title">制作者：宫商角徵</div>
       <div class="info-line">上次更新：{{ updatetime }}</div>
+      <div class="info-line">今日访问：{{ pageToday }}  ·  总访问：{{ pageTotal }}</div>
+      <div class="info-line">今日使用：{{ usageToday }}  ·  总使用：{{ usageTotal }}</div>
     </div>
     <div v-if="showNotice" class="notice-overlay" @click.self="showNotice = false">
       <div class="notice-box">
@@ -96,6 +98,10 @@ const totalChart = ref(null)
 const total = ref(0)
 const tagList = ref([])
 const updatetime = ref('加载中...')
+const usageTotal = ref(0)
+const usageToday = ref(0)
+const pageTotal = ref(0)
+const pageToday = ref(0)
 const showInfo = ref(false)
 const showNotice = ref(false)
 const noticeHtml = ref('')
@@ -116,11 +122,16 @@ const competentTags = computed(() => tagList.value.filter(t => t.mastery >= 20 &
 const noviceTags = computed(() => tagList.value.filter(t => t.mastery > 0 && t.mastery < 20))
 
 onMounted(async () => {
+  fetch('/api/ping').catch(() => {})
   try {
     const r = await fetch('/api/info')
     if (r.ok) {
       const d = await r.json()
       updatetime.value = d.updatetime || '未知'
+      usageTotal.value = d.usageTotal || 0
+      usageToday.value = d.usageToday || 0
+      pageTotal.value = d.pageTotal || 0
+      pageToday.value = d.pageToday || 0
     }
   } catch (_) { updatetime.value = '读取失败' }
 })

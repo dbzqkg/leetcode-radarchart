@@ -2,6 +2,7 @@ package com.lzh.radar.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.lzh.radar.service.VisitsService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,18 +21,38 @@ public class InfoController {
 
     private final Path configPath;
     private final Path noticePath;
+    private final VisitsService visitsService;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public InfoController(@Value("${app.sources.path:../../Sources}") String sourcesPath) {
+    public InfoController(@Value("${app.sources.path:../../Sources}") String sourcesPath,
+                          VisitsService visitsService) {
         this.configPath = Path.of(sourcesPath, "posts", "application.yml");
         this.noticePath = Path.of(sourcesPath, "posts", "须知.md");
+        this.visitsService = visitsService;
     }
 
     @GetMapping(value = "/api/info", produces = MediaType.APPLICATION_JSON_VALUE)
     public String info() {
         ObjectNode node = mapper.createObjectNode();
         node.put("updatetime", readUpdateTime());
+
+        Map<String, Integer> usage = visitsService.usageStats();
+        node.put("usageTotal", usage.values().stream().mapToInt(Integer::intValue).sum());
+        node.put("usageToday", usage.getOrDefault(java.time.LocalDate.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")), 0));
+
+        Map<String, Integer> page = visitsService.pageStats();
+        node.put("pageTotal", page.values().stream().mapToInt(Integer::intValue).sum());
+        node.put("pageToday", page.getOrDefault(java.time.LocalDate.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")), 0));
+
         return node.toString();
+    }
+
+    @GetMapping("/api/ping")
+    public String ping() {
+        visitsService.incrementPage();
+        return "{}";
     }
 
     @GetMapping(value = "/api/notice", produces = MediaType.APPLICATION_JSON_VALUE)
