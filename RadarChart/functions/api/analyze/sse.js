@@ -39,8 +39,10 @@ const TAG_WEIGHTS = {};
   tags.forEach(t => TAG_WEIGHTS[t] = w);
 });
 
-function buildReq(cookie, body) {
-  return { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Referer: 'https://leetcode.cn/', Origin: 'https://leetcode.cn', 'User-Agent': UA }, body };
+function buildReq(cookie, csrf, body) {
+  const headers = { 'Content-Type': 'application/json', Cookie: cookie, Referer: 'https://leetcode.cn/', Origin: 'https://leetcode.cn', 'User-Agent': UA };
+  if (csrf) headers['x-csrftoken'] = csrf;
+  return { method: 'POST', headers, body };
 }
 
 function diffScore(d) {
@@ -49,14 +51,14 @@ function diffScore(d) {
   return 1;
 }
 
-async function crawl(cookie, send) {
+async function crawl(cookie, csrf, send) {
   const map = new Map();
   const cog = [0,0,0,0,0,0];
   let totalQ = 0, loaded = 0, skip = 0, more = true;
 
   while (more) {
     const p = JSON.stringify({ operationName: 'problemsetQuestionList', variables: { categorySlug: '', skip, limit: LIMIT, filters: { status: 'AC' } }, query: 'query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) { problemsetQuestionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) { hasMore total questions { difficulty topicTags { name nameTranslated slug } } } }' });
-    const r = await fetch(API_URL, buildReq(cookie, p));
+    const r = await fetch(API_URL, buildReq(cookie, csrf, p));
     if (r.status !== 200) { send({ status: 'ERROR', message: `凭证失效 [HTTP ${r.status}]` }); return; }
     const j = await r.json();
     if (j.errors) { send({ status: 'ERROR', message: `凭证失效 [${JSON.stringify(j.errors)}]` }); return; }
@@ -108,6 +110,9 @@ export async function onRequest(context) {
   if (!cookie.includes('LEETCODE_SESSION'))
     return new Response(JSON.stringify({ status: 'ERROR', message: 'Cookie 中必须包含 LEETCODE_SESSION' }), { headers: { 'Content-Type': 'application/json' } });
 
+  const m = cookie.match(/csrftoken=([^;]+)/);
+  const csrf = m ? m[1] : '';
+
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const enc = new TextEncoder();
@@ -116,7 +121,7 @@ export async function onRequest(context) {
   send({ status: 'START' });
 
   context.waitUntil(
-    crawl(cookie, send).finally(() => { try { writer.close(); } catch (_) {} })
+    crawl(cookie, csrf, send).finally(() => { try { writer.close(); } catch (_) {} })
   );
 
   return new Response(readable, {

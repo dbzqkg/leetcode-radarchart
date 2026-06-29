@@ -122,10 +122,12 @@ public class LeetCodeCrawlerService {
     }
 
     public void crawl(String cookie, SseEmitter emitter) {
-        new Thread(() -> doCrawl(cookie, emitter)).start();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("csrftoken=([^;]+)").matcher(cookie);
+        String csrf = m.find() ? m.group(1) : "";
+        new Thread(() -> doCrawl(cookie, csrf, emitter)).start();
     }
 
-    private void doCrawl(String cookie, SseEmitter emitter) {
+    private void doCrawl(String cookie, String csrf, SseEmitter emitter) {
         HttpClient client = HttpClient.newHttpClient();
         Map<String, TagStat> tagMap = new LinkedHashMap<>();
         double[] cogRaw = new double[6];
@@ -150,7 +152,7 @@ public class LeetCodeCrawlerService {
                 }
                 """.formatted(skip, LIMIT);
 
-                HttpRequest request = buildRequest(cookie, payload);
+                HttpRequest request = buildRequest(cookie, csrf, payload);
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (response.statusCode() != 200) {
@@ -244,7 +246,7 @@ public class LeetCodeCrawlerService {
                 }
                 """.formatted(skip, TAG_DISCOVERY_LIMIT);
 
-                HttpRequest request = buildRequest(cookie, payload);
+                HttpRequest request = buildRequest(cookie, csrf, payload);
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (response.statusCode() != 200) {
@@ -352,16 +354,18 @@ public class LeetCodeCrawlerService {
         return Math.round(mastery * 10.0) / 10.0;
     }
 
-    private HttpRequest buildRequest(String cookie, String payload) {
-        return HttpRequest.newBuilder()
+    private HttpRequest buildRequest(String cookie, String csrf, String payload) {
+        var builder = HttpRequest.newBuilder()
                 .uri(URI.create(API_URL))
                 .header("Content-Type", "application/json")
                 .header("Cookie", cookie)
                 .header("Referer", "https://leetcode.cn/")
                 .header("Origin", "https://leetcode.cn")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .POST(HttpRequest.BodyPublishers.ofString(payload))
-                .build();
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        if (csrf != null && !csrf.isEmpty()) {
+            builder.header("x-csrftoken", csrf);
+        }
+        return builder.POST(HttpRequest.BodyPublishers.ofString(payload)).build();
     }
 
     private void emitError(SseEmitter emitter, String message) {
