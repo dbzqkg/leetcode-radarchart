@@ -82,6 +82,32 @@ async function crawl(cookie, csrf, send) {
     await new Promise(rs => setTimeout(rs, SLEEP_MS));
   }
 
+  // Phase 2: collect all tag names from full problem set
+  send({ status: 'RUNNING', message: '正在收集全部标签...', currentStep: 0, totalSteps: 1 });
+  let skip2 = 0, more2 = true, page = 0;
+  const allNames = new Set(map.keys());
+  while (more2) {
+    const p = JSON.stringify({ operationName: 'problemsetQuestionList', variables: { categorySlug: '', skip: skip2, limit: 500, filters: {} }, query: 'query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) { problemsetQuestionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) { hasMore questions { topicTags { name nameTranslated } } } }' });
+    const r = await fetch(API_URL, buildReq(cookie, csrf, p));
+    if (r.status !== 200) { send({ status: 'ERROR', message: `凭证失效 [HTTP ${r.status}]` }); return; }
+    const j = await r.json();
+    if (j.errors) { send({ status: 'ERROR', message: `凭证失效 [${JSON.stringify(j.errors)}]` }); return; }
+    more2 = j.data.problemsetQuestionList.hasMore;
+    for (const q of j.data.problemsetQuestionList.questions) {
+      for (const t of (q.topicTags || [])) {
+        const name = (t.nameTranslated && t.nameTranslated !== 'null') ? t.nameTranslated : t.name;
+        if (name) allNames.add(name);
+      }
+    }
+    page++;
+    send({ status: 'RUNNING', message: `正在收集全部标签... (第${page}页)`, currentStep: 1, totalSteps: 1 });
+    skip2 += 500;
+    await new Promise(rs => setTimeout(rs, SLEEP_MS));
+  }
+  for (const name of allNames) {
+    if (!map.has(name)) map.set(name, { name, slug: '', total: 0, easy: 0, medium: 0, hard: 0 });
+  }
+
   for (const s of map.values()) {
     const sc = s.easy + s.medium * 2.5 + s.hard * 5;
     if (sc === 0) { s.mastery = 0; continue; }
